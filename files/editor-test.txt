@@ -1,4 +1,0 @@
-Hello from Postman!
-Writing from frontend.
-Hi!
-I'm Amrutha
