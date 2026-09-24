@@ -13,32 +13,73 @@ def home():
 @app.route("/files",methods=["POST"])
 def create_file():
     data=request.get_json()
-    filename=data.get("filename")
+    file_path =data.get("path")
     content = data.get("content", "")
-    if not filename:
-        return jsonify({"error":"Filename is required"}), 400
-    file_path=FILES_DIR / filename
-    file_path.write_text(content,encoding="utf-8")
-    return jsonify({"message":"File created successfully","filename":filename}),201
+
+    if not file_path:
+        return jsonify({"error":"File path is required"}), 400
+    
+    path = Path(file_path)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(content, encoding="utf-8")
+    return jsonify({"message": "File saved successfully","path": str(path)}), 201
 
 #Read
-@app.route("/files/<filename>",methods=["GET"])
-def get_file(filename):
-    file_path=FILES_DIR/filename
-    if not file_path.exists():
-        return jsonify({"error":"File not Found"}), 404
-    content=file_path.read_text(encoding="utf-8")
-    return jsonify({"filename":filename,"content":content})
+@app.route("/files",methods=["GET"])
+def get_file():
+    data=request.get_json()
+
+    if not data or not data.get("path"):
+        return jsonify({"error": "File path is required"}), 400
+
+    path = Path(data["path"])
+
+    if not path.exists():
+        return jsonify({"error": "File not found"}), 404
+    
+    if not path.is_file():
+        return jsonify({"error": "Path is not a file"}), 400
+    
+    content=path.read_text(encoding="utf-8")
+    return jsonify({"path": str(path),"content": content})
 
 #Delete
-@app.route("/files/<filename>",methods=["DELETE"])
-def delete_file(filename):
-    file_path=FILES_DIR/filename
-    if not file_path.exists():
-        return jsonify({"error":"File not Found"}), 404
-    file_path.unlink()
-    return jsonify({"message":"File deleted successfully","filename":filename})
+@app.route("/files", methods=["DELETE"])
+def delete_file():
+    data = request.get_json()
 
+    if not data or not data.get("path"):
+        return jsonify({"error": "File path is required"}), 400
+
+    path = Path(data["path"])
+
+    if not path.exists():
+        return jsonify({"error": "File not found"}), 404
+
+    if not path.is_file():
+        return jsonify({"error": "Path is not a file"}), 400
+
+    path.unlink()
+    return jsonify({"message": "File deleted successfully","path": str(path)})
+
+@app.route("/files/list", methods=["GET"])
+def list_files():
+    data = request.get_json()
+
+    if not data or not data.get("directory"):
+        return jsonify({"error": "Directory path is required"}), 400
+
+    directory = Path(data["directory"])
+
+    if not directory.exists():
+        return jsonify({"error": "Directory not found"}), 404
+
+    if not directory.is_dir():
+        return jsonify({"error": "Path is not a directory"}), 400
+
+    files = [str(path) for path in directory.iterdir() if path.is_file()]
+
+    return jsonify({"directory": str(directory),"files": files})
 
 if __name__ == "__main__":
     app.run(debug=True)
