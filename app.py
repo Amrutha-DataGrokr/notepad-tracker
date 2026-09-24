@@ -1,85 +1,100 @@
-from flask import Flask, jsonify, request
+from flask import Flask, jsonify, render_template, request
 from pathlib import Path
+import subprocess
 
 app = Flask(__name__)
-FILES_DIR=Path("files")
+
+
+def git(path, *arguments):
+    return subprocess.run(
+        ["git", *arguments], cwd=path, capture_output=True, text=True
+    )
+
+
+def commit_file(path):
+    repository = git(path.parent, "rev-parse", "--show-toplevel")
+    if repository.returncode != 0:
+        git(path.parent, "init")
+        repository = git(path.parent, "rev-parse", "--show-toplevel")
+
+    root = Path(repository.stdout.strip()).resolve()
+    relative_path = path.resolve().relative_to(root)
+    git(root, "add", "-f", str(relative_path))
+
+    if git(root, "diff", "--cached", "--quiet").returncode == 0:
+        return "unchanged"
+
+    result = git(
+        root,
+        "-c", "user.name=Notepad Tracker",
+        "-c", "user.email=notepad-tracker@localhost",
+        "commit", "-m", f"Update {path.name}",
+    )
+    if result.returncode != 0:
+        raise RuntimeError(result.stderr or "Could not commit file")
+
+    return git(root, "rev-parse", "--short", "HEAD").stdout.strip()
 
 
 @app.route("/")
 def home():
-    return "Notepad Tracker is running."
+    return render_template("editor.html")
 
-#Create or Update
-@app.route("/files",methods=["POST"])
-def create_file():
-    data=request.get_json()
-    file_path =data.get("path")
-    content = data.get("content", "")
 
-    if not file_path:
-        return jsonify({"error":"File path is required"}), 400
-    
-    path = Path(file_path)
-    path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(content, encoding="utf-8")
-    return jsonify({"message": "File saved successfully","path": str(path)}), 201
+@app.route("/files", methods=["POST"])
+def save_file():
+    data = request.get_json()
+    path = Path(data["path"]).expanduser()
 
-#Read
-@app.route("/files",methods=["GET"])
+    try:
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(data.get("content", ""), encoding="utf-8")
+        revision = commit_file(path)
+    except (OSError, RuntimeError) as error:
+        return jsonify({"error": str(error)}), 500
+
+    return jsonify({
+        "message": "File saved and committed",
+        "path": str(path),
+        "revision": revision,
+    })
+
+
+@app.route("/files", methods=["GET"])
 def get_file():
-    data=request.get_json()
+    data = request.get_json() 
+    path = Path(data["path"]).expanduser()
 
-    if not data or not data.get("path"):
-        return jsonify({"error": "File path is required"}), 400
-
-    path = Path(data["path"])
-
-    if not path.exists():
-        return jsonify({"error": "File not found"}), 404
-    
     if not path.is_file():
-        return jsonify({"error": "Path is not a file"}), 400
-    
-    content=path.read_text(encoding="utf-8")
-    return jsonify({"path": str(path),"content": content})
+        return jsonify({"error": "File not found"}), 404
 
-#Delete
+    return jsonify({
+        "path": str(path),
+        "content": path.read_text(encoding="utf-8"),
+    })
+
+
 @app.route("/files", methods=["DELETE"])
 def delete_file():
     data = request.get_json()
-
-    if not data or not data.get("path"):
-        return jsonify({"error": "File path is required"}), 400
-
-    path = Path(data["path"])
-
-    if not path.exists():
-        return jsonify({"error": "File not found"}), 404
+    path = Path(data["path"]).expanduser()
 
     if not path.is_file():
-        return jsonify({"error": "Path is not a file"}), 400
+        return jsonify({"error": "File not found"}), 404
 
     path.unlink()
-    return jsonify({"message": "File deleted successfully","path": str(path)})
+    return jsonify({"message": "File deleted", "path": str(path)})
+
 
 @app.route("/files/list", methods=["GET"])
 def list_files():
-    data = request.get_json()
+    directory = Path(request.args["directory"]).expanduser()
 
-    if not data or not data.get("directory"):
-        return jsonify({"error": "Directory path is required"}), 400
+    return jsonify({
+        "directory": str(directory),
+        "files": [str(path) for path in directory.iterdir() if path.is_file()],
+    })
 
-    directory = Path(data["directory"])
-
-    if not directory.exists():
-        return jsonify({"error": "Directory not found"}), 404
-
-    if not directory.is_dir():
-        return jsonify({"error": "Path is not a directory"}), 400
-
-    files = [str(path) for path in directory.iterdir() if path.is_file()]
-
-    return jsonify({"directory": str(directory),"files": files})
 
 if __name__ == "__main__":
     app.run(debug=True)

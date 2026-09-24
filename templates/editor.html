@@ -1,0 +1,39 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Notepad Tracker</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/styles.css') }}">
+    <script src="{{ url_for('static', filename='js/script.js', v='3') }}" defer></script>
+</head>
+
+<body>
+
+    <h1>Notepad Tracker</h1>
+
+    <label for="filePath">File path:</label>
+    <br>
+
+    <input
+        type="text"
+        id="filePath"
+        placeholder="C:\Users\Darsh\Documents\notes.txt"
+    >
+
+    <br>
+
+    <button type="button" id="openFile">Open File</button>
+    <button type="button" id="saveFile">Save File</button>
+    <button type="button" id="deleteFile">Delete File</button>
+
+    <br><br>
+
+    <textarea
+        id="editor"
+        placeholder="Start writing..."
+    ></textarea>
+
+    <div id="status"></div>
+
+</body>
+</html>
