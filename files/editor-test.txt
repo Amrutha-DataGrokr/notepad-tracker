@@ -1,2 +1,2 @@
 Hi!
-This is the editor-test file
+This is the editor-test file.
